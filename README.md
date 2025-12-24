@@ -16,9 +16,8 @@ The project implements a Bronze → Silver → Gold medallion architecture with 
 - [Data Sources](#Data-Sources)
 - [Implementation Details](#Implementation-Details)
 - [How to run / reproduce](#how-to-run--reproduce)
-- [Screenshots & Visuals](#Screenshots-&-Visuals)
-- [Key Takeaways & Learnings](#Key-Takeaways-&-Learnings)
-- 
+- [Screenshots & Visuals](#Screenshots--Visuals)
+- [Key Takeaways & Learnings](#Key-Takeaways--Learnings)
 
 ---
 ## Technology Stack
