@@ -1,32 +1,46 @@
-# Car_Sales — Azure Data Engineering Project
+# Car Sales - End-to-End Azure Data Engineering Project
 
-A complete end-to-end data engineering solution for ingesting, processing and modeling car sales data using Azure Data Factory, Azure Databricks and file-based datasets.  
-This repository contains sample data, Databricks notebooks (exported .dbc), Azure Data Factory pipeline exports, and architecture & screenshots used to build a Bronze → Silver → Gold data pipeline for analytics.
+An end-to-end Azure data engineering solution that ingests, processes, and models car sales data using Azure Data Factory, Azure Databricks, and Azure Data Lake Storage (ADLS Gen2).
+The project implements a Bronze → Silver → Gold medallion architecture with incremental loading, governed lakehouse design, and analytics-ready dimensional modeling.
+<br><br>
+[![Azure Data Factory](https://img.shields.io/badge/Azure_Data_Factory-0078D4?logo=azure&logoColor=white)](https://learn.microsoft.com/en-us/azure/data-factory/)
+[![Azure Databricks](https://img.shields.io/badge/Azure_Databricks-FF3900?logo=databricks&logoColor=white)](https://azure.microsoft.com/en-us/products/databricks)
+[![ADLS Gen2](https://img.shields.io/badge/ADLS_Gen2-0089D6?logo=microsoftazure&logoColor=white)](https://learn.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-introduction)
+[![PySpark](https://img.shields.io/badge/PySpark-E25A1C?logo=apachespark&logoColor=white)](https://spark.apache.org/docs/latest/api/python/)
+[![Delta Lake](https://img.shields.io/badge/Delta_Lake-00A651?logo=delta&logoColor=white)](https://delta.io/)
 
-Table of Contents
+## Table of Contents
+- [Technology Stack](#Technology-Stack)
 - [Project Overview](#project-overview)
 - [Architecture](#architecture)
-- [Data Sources](#data-sources)
-- [ETL / Pipeline Overview](#etl--pipeline-overview)
+- [Data Sources](#Data-Sources)
+- [Implementation Details](#Implementation-Details)
 - [How to run / reproduce](#how-to-run--reproduce)
-- [Databricks Notebooks & ADF Pipelines](#databricks-notebooks--adf-pipelines)
-- [Incremental Load Strategy](#incremental-load-strategy)
-- [Sample DDL & Queries](#sample-ddl--queries)
-- [Screenshots & Visuals](#screenshots--visuals)
-- [Possible Improvements](#possible-improvements)
-- [License & Contact](#license--contact)
+- [Screenshots & Visuals](#Screenshots_&_Visuals)
+- [Key Takeaways & Learnings](#Key_Takeaways_&_Learnings)
+- 
 
 ---
+## Technology Stack
 
+| Category | Technology | Usage |
+| :--- | :--- | :--- |
+| **Orchestration** | **Azure Data Factory (ADF)** | Pipeline orchestration, triggering, and incremental ingestion logic. |
+| **Compute** | **Azure Databricks** | PySpark & SQL for data transformation and modeling. |
+| **Storage** | **ADLS Gen2** | Hierarchical namespace storage for the Data Lake. |
+| **Governance** | **Unity Catalog** | Centralized metadata, access control, and lineage. |
+| **Format** | **Delta Lake** | ACID transactions, Schema Enforcement, and Time Travel. |
+| **Source** | **Azure SQL DB** | Source system for incremental load simulation. |
+
+---
 ## Project Overview
-This project demonstrates an Azure-based data engineering pipeline for Car Sales analytics. It ingests CSV data (static and incremental), processes and transforms the data using Databricks notebooks, and contains exported Azure Data Factory pipeline definitions to orchestrate the flow. The output is a set of curated gold tables (dimensions + fact) suitable for BI and analytics.
+This project demonstrates an enterprise-grade Azure data engineering pipeline for Car Sales analytics. It orchestrates the ingestion of static and incremental CSV data, transforms it using Databricks (PySpark/SQL), and serves it via a Gold layer suitable for BI reporting.
 
-Key technologies:
-- Azure Data Factory (ADF) — orchestration / ingestion
-- MS SQL Server Data Base (MS SQL Server DB) — Incremenatl Load
-- Azure Data Lake Storage (ADLS) or blob storage — data lake (bronze/silver/gold)
-- Databricks (PySpark / SQL notebooks) — transformations & modeling
-- Target analytical model: dimensional (dimensions + fact table)
+**Key Features:**
+* **Medallion Architecture:** Bronze (Raw), Silver (Cleaned), Gold (Star Schema).
+* **Incremental Loading:** Efficiently processes only new records using Watermarking.
+* **Governance:** Utilizes Unity Catalog for centralized metadata management.
+* **Automation:** Fully automated end-to-end via Azure Data Factory pipelines.
 
 ---
 
@@ -38,66 +52,48 @@ The repository contains an architecture diagram describing the end-to-end flow. 
 - ADF pipelines orchestrate copying/importing and can support incremental loads.
 
 View the architecture diagram:
-- [Architecture Diagram.png](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Architecture%20Diagram.png)
+- ![Architecture Diagram.png](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Architecture%20Diagram.png)
 
 ---
 
 ## Data Sources
-This repo includes two example CSV files used as sample datasets for the pipeline:
-- CarSales Data/SalesData.csv — full historical sales records (sample)
-- CarSales Data/IncrementalSales.csv — incremental records (sample for incremental pipeline)
+The project utilizes two primary datasets provided in the `CarSales Data` folder:
+1.  `SalesData.csv`: Full historical sales records.
+2.  `IncrementalSales.csv`: New records to demonstrate the incremental pipeline.
 
 Both CSVs include the following columns (example row headers):
 Branch_ID, Dealer_ID, Model_ID, Revenue, Units_Sold, Date_ID, Day, Month, Year, BranchName, DealerName, Product_Name
 
-These are the raw inputs used by the provided Databricks notebooks and ADF pipelines.
-
 ---
+## Implementation Details
+
+### Azure Infrastructure
+* **Storage:** ADLS Gen2 with Hierarchical Namespace (HNS) enabled; secured via Entra ID.
+* **Security:** Managed Identity (MI) used for all service-to-service authentication (ADF to SQL, ADF to Storage).
+
+### Azure Data Factory Configuration
+* **Integration:** Linked Services configured for SQL, ADLS, and GitHub.
+* **Pattern:** Utilizes **Lookup** (to check watermarks) + **Copy Activity** (to move data) + **Stored Procedures** (to update watermarks).
+
+### Databricks & Unity Catalog
+* **Metastore:** Account-level Unity Catalog enabled with a regional metastore.
+* **Storage Credentials:** Access Connectors configured for secure access to Bronze, Silver, and Gold containers.
+* **Tables:** All data assets are stored as **Delta Tables** for performance and reliability.
+
+### Data Processing Layers
+* **🥉 Bronze:** Raw ingestion landing zone.
+* **🥈 Silver:** Data cleaning, type casting, deduplication, and standardization.
+* **🥇 Gold:** Dimensional modeling (Star Schema) with Fact and Dimension tables.
+
 
 ## ETL / Pipeline Overview
-Typical pipeline flow (implemented across ADF + Databricks notebooks in this repo):
 
-1. Ingest: ADF pipelines copy source CSVs from source (or Git) to landing ADLS (bronze).
-2. Bronze: Persist raw files as-is (partitioned by ingestion time / source).
-3. Silver: Databricks notebooks parse, validate, normalize, and deduplicate raw data. Columns are cleaned and typed.
-4. Gold: Databricks notebooks create dimension tables and the fact sales table, applying any required transformations, surrogate keys and joins.
-5. Incremental: ADF + Databricks apply incremental logic to detect new/changed rows (using Date_ID or ingestion watermark) and MERGE into gold tables.
+1.  **Ingest:** ADF pipelines copy source data to the **Bronze** layer.
+2.  **Cleanse (Silver):** Databricks notebooks read Bronze data, validate schemas, remove duplicates, and write to **Silver** tables.
+3.  **Model (Gold):** Transformations are applied to create Dimension tables (`Dim_Branch`, `Dim_Dealer`, `Dim_Model`, `Dim_Date`) and the Fact table (`Fact_Sales`).
+4.  **Upsert:** The pipeline utilizes the `MERGE INTO` Delta command to handle updates and insertions seamlessly.
 
-View the architecture diagram:
-- [Incremenatl pipeline.png](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Incremental%20Pipeline.png)
-
----
-
-## How to run / reproduce
-
-Prerequisites
-- Azure subscription with:
-  - Azure Data Lake Storage Gen2 (ADLS) or Blob Storage
-  - MS SQL Server Database
-  - Azure Databricks workspace
-  - Azure Data Factory (For orchestration)
-- Databricks runtime supporting PySpark / SQL
-
-Steps (high level)
-1. Clone repo
-   - git clone https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project.git
-2. Upload sample CSVs to your storage account (or use ADF copy pipelines included):
-   - Place SalesData.csv and IncrementalSales.csv into a landing container/folder (e.g., adls://<container>/bronze/carsales/)
-3. Import Databricks notebooks:
-   - In Databricks workspace import the `.dbc` files from `Databricks Notebooks` (Workspace → Import → choose .dbc).
-   - Recommended execution order:
-     1. Schema_Notebook — sets up schemas / config variables
-     2. silver_notebook — ingestion/cleaning transformations to create silver data
-     3. gold_dim_* notebooks — build dimension tables (branch, date, dealer, model)
-     4. gold_fact_sales — build sales fact table (aggregations / merges)
-4. (Optional) Import ADF pipelines:
-   - Use the zip files in `Data factory pipelines/` → Import into Azure Data Factory (Manage → Git configuration or Import ARM template depending on the ZIP format).
-   - Adjust linked services (credentials, storage account, Databricks workspace token) to match your environment.
-5. Run notebooks/pipelines and validate outputs in your gold database / Data Lake.
-
-Notes:
-- Set workspace secrets or notebook-scoped variables for storage paths, DB/warehouse names, and credentials.
-- The Databricks notebooks are exported in `.dbc` form — open them to view/modify the cells to match your environment.
+![Incremental Pipeline](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Incremental%20Pipeline.png)
 
 ---
 
@@ -109,53 +105,36 @@ This repository includes an `IncrementalSales.csv` sample and an incremental pip
 4. Idempotency: Keep processed-file logs (or store file ingestion metadata) to avoid reprocessing the same file twice.
 
 Refer to:
-- [Incremenatl pipeline.png](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Incremental%20Pipeline.png)
+- <img width="975" height="683" alt="image" src="https://github.com/user-attachments/assets/a14fdf95-2184-4b41-a111-77a568ca3986" />
 
 ---
 
-## Sample DDL & Example MERGE
+## How to run / reproduce
 
-Example CREATE TABLE DDLs (Delta/parquet-compatible):
+### Prerequisites
+* Azure Subscription (ADLS Gen2, ADF, SQL DB, Databricks Workspace).
+* Databricks Runtime 13.3 LTS or higher.
 
-CREATE TABLE dim_date (
-  date_id STRING,
-  day INT,
-  month INT,
-  year INT,
-  full_date DATE
-);
+### Steps
+1.  **Clone the Repository:**
+    ```bash
+    git clone [https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project.git]
+    ```
+2.  **Setup Storage:**
+    * Create containers: `bronze`, `silver`, `gold`, `scripts`.
+    * Upload `SalesData.csv` to the landing path.
+3.  **Import Notebooks:**
+    * Import `.dbc` files from the `Databricks Notebooks` folder into your workspace.
+    * Update configuration variables (storage paths) in `Schema_Notebook`.
+4.  **Configure ADF:**
+    * Import pipelines from `Data factory pipelines/`.
+    * Update Linked Services to point to your specific Azure resources.
+5.  **Execute:**
+    * Run the `Master_Pipeline` in ADF to trigger the full flow.
 
-CREATE TABLE dim_branch (
-  branch_id STRING,
-  branch_name STRING
-);
-
-CREATE TABLE dim_dealer (
-  dealer_id STRING,
-  dealer_name STRING
-);
-
-CREATE TABLE dim_model (
-  model_id STRING,
-  product_name STRING
-);
-
-CREATE TABLE fact_sales (
-  sale_id BIGINT GENERATED BY DEFAULT AS IDENTITY,
-  branch_id STRING,
-  dealer_id STRING,
-  model_id STRING,
-  date_id STRING,
-  revenue DOUBLE,
-  units_sold INT
-);
-
-Example MERGE (Databricks/Delta) — upsert incremental records into fact_sales:
-MERGE INTO gold.fact_sales AS tgt
-USING incremental_sales AS src
-ON tgt.branch_id = src.branch_id AND tgt.dealer_id = src.dealer_id AND tgt.model_id = src.model_id AND tgt.date_id = src.date_id
-WHEN MATCHED THEN UPDATE SET tgt.revenue = src.revenue, tgt.units_sold = src.units_sold
-WHEN NOT MATCHED THEN INSERT (branch_id, dealer_id, model_id, date_id, revenue, units_sold) VALUES (src.branch_id, src.dealer_id, src.model_id, src.date_id, src.revenue, src.units_sold)
+Notes:
+- Set workspace secrets or notebook-scoped variables for storage paths, DB/warehouse names, and credentials.
+- The Databricks notebooks are exported in `.dbc` form — open them to view/modify the cells to match your environment.
 
 ---
 
@@ -166,25 +145,39 @@ WHEN NOT MATCHED THEN INSERT (branch_id, dealer_id, model_id, date_id, revenue, 
 - Catalog screenshot: [Carsales_catalog.png](https://github.com/Koushiksai2127/Car_sales-Azure-Data-Engineering-Project/blob/main/Architecture%20%26%20Screenshots/Carsales_catalog.png)
 
 ---
+## Key Takeaways & Learnings
 
-## Possible Improvements / Next Steps
-- Add unit-tests / data quality checks for incoming files (record counts, null checks, schema validation).
-- Add CI/CD for Databricks notebooks (use repo-backed workspace or Databricks Repos).
-- Implement SCD Type 2 logic for dimensions if historical attributes must be tracked.
-- Add parameterization and a configuration file (JSON / YAML) for environment-specific settings.
-- Convert `.dbc` to `.py` or source-controlled notebooks (Git friendly) for easier diffs and PRs.
-- Provide a sample ARM or Bicep template to automatically deploy ADF pipelines and storage resources.
+### Solving Managed Identity for Azure SQL
+One of the critical challenges I overcame was authenticating Azure Data Factory with Azure SQL Database using Managed Identity. I learned that unlike other resources, SQL Server does not have a built-in RBAC role for MSI.
+* **Solution:** I had to explicitly create the ADF Managed Identity as a "Contained User" in the database using `CREATE USER [MyDF] FROM EXTERNAL PROVIDER` and assign roles manually.
+* **Reference:** I followed this [Microsoft Q&A guide](https://learn.microsoft.com/en-us/answers/questions/1180796/adding-azure-data-factory-managed-identity-to-azur) to resolve the permission errors.
+
+### Unity Catalog & Data Governance
+Implementing **Unity Catalog** gave me a clear understanding of how to decouple metadata from physical storage. I learned the distinct roles of:
+* **Metastore:** Acts as the "brain" for permissions and schema definitions (Metadata) .
+* **Storage Credentials & External Locations:** The bridge that securely allows the metastore to access ADLS Gen2 without exposing access keys.
+* **Medallion Architecture Governance:** By creating separate external locations for Bronze, Silver, and Gold, I established a secure lineage where different teams can have isolated access levels.
+
+### Hybrid Orchestration (ADF + Databricks Workflows)
+I moved beyond simple orchestration by integrating **Databricks Workflows** within Azure Data Factory.
+* While ADF handled the ingestion and watermarking logic, I leveraged Databricks Workflows to run the transformation notebooks (Silver → Gold) in parallel.
+* This hybrid approach optimized cost and performance, ensuring the Star Schema (Fact/Dimensions) was populated efficiently before the Power BI refresh.
 
 ---
 
-## License & Contact
-This repository is provided as-is for learning and demonstration purposes. Please contact the repository owner for questions, improvements or contributions.
+## Final Thoughts
 
-Repository owner: [Koushiksai2127](https://github.com/Koushiksai2127)
+<div align="center">
+  <p>
+    Building this project has improved my practical skills in <b>Azure Data Engineering</b> and strengthened my understanding of cloud architecture design. It reflects my curiosity, persistence, and passion for developing real, end-to-end cloud data solutions—from raw CSV ingestion to <b>Power BI</b> visualization.
+  </p>
 
----
+  <p>
+    <i>More Azure, Databricks, and data platform projects will be added soon.</i>
+  </p>
 
-If you'd like, I can:
-- Produce a polished ARM/Bicep template for deploying required Azure resources,
-- Convert the Databricks `.dbc` exports into notebook files (.ipynb / .py) with run-order and parameter cells,
-- Create a short runbook for importing the ADF zips and updating linked services step-by-step.
+  <h3>Let's Connect 🤝</h3>
+  <p>
+    If you have suggestions, feedback, or opportunities, feel free to reach out! I’m always excited to learn, collaborate, and work on meaningful data projects.
+  </p>
+</div>
